@@ -1,0 +1,4 @@
+# Simpler-Bot
+A port of my Discord bot for Java, but instead made in Javascript using Node.JS and Discord.JS
+
+Made with Discord.JS (https://discord.js.org/#/)
