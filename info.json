@@ -1,7 +1,7 @@
 {
 
-    "token": "NTA0MTY3ODAyMTE1MTk0ODgw.DrBKSA.mTq9pkxzoVbr2wK1CZpatNivn0A",
-    "clientID": "504167802115194880",
-    "clientSecret": "B1xqBldSmGhGKBAR0Rc4f3OuWsHT7Q49"
+    "token": "yourToken",
+    "clientID": "yourClientID",
+    "clientSecret": "yourSecret"
 
 }
