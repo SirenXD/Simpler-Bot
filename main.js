@@ -35,7 +35,8 @@ client.on('ready', () => {
 function purge(msg, command, args) {
     //Get all of the messages in the channel, and delete however many the user specified - Up to 100
     msg.channel.fetchMessages({ limit : parseInt(args[0]) }).then(messages => {
-        messages.deleteAll();
+        var filteredMessages = messages.filter(message => !message.pinned)
+        filteredMessages.deleteAll();
     }).catch(console.error);
 }
 
@@ -111,7 +112,7 @@ function play(msg, command, args){
     if(connection === undefined || connection === null){
         //Get the request from the Queue.
         var request = queue.shift();
-        streamSong(request, channel);
+        streamSong(request, channel, msg);
 
     } else{
         console.log(connection + "," + dispatcher);
@@ -128,7 +129,7 @@ function skip(msg){
     }
 }
 
-function streamSong(request, channel){
+function streamSong(request, channel, msg){
 //Join the user's channel
         connection = channel.join().then(conn =>{
             //Get the audio stream from Youtube
@@ -152,7 +153,12 @@ function streamSong(request, channel){
                 }
             });
 
-        }).catch(console.error);
+        });
+}
+
+function songRequestError(request, channel, msg){
+    msg.reply("Error requesting song.");
+    channel.leave();
 }
 
 //Whenever a user posts a message to a channel
