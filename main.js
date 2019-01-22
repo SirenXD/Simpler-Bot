@@ -247,7 +247,6 @@ class Server{
                 });
 
             }).catch(e => {
-                console.log("That's a fuckin yikes");
                 if(this.queue.length > 0){
                     this.streamSong(msg, channel, this.queue.shift());
                 } else {
