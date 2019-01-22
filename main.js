@@ -78,11 +78,6 @@ function skip(msg){
     getServerByGuild(msg.channel.guild).skip(msg, "This shouldn't ever show up.");
 }
 
-function songRequestError(request, channel, msg){
-    msg.reply("Error requesting song.");
-    channel.leave();
-}
-
 //Whenever a user posts a message to a channel
 client.on('message', msg => {
 
