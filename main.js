@@ -25,135 +25,57 @@ var dispatcher;
 //A queue of requested songs
 var queue = new Array();
 
+//A list of Guilds the bot is on.
+var servers = new Array();
+
 //On successful login
 client.on('ready', () => {
     console.log(`\n\n\nLogged in as ${client.user.tag}!`);
+    for(let i = 0; i < client.guilds.array().length; i++){
+        servers.push(new Server(client.guilds.array()[i]));
+    }
 });
 
-
-//Deletes messages from the channel that the command was posted in
-function purge(msg, command, args) {
-    //Get all of the messages in the channel, and delete however many the user specified - Up to 100
-    msg.channel.fetchMessages({ limit : parseInt(args[0]) }).then(messages => {
-        var filteredMessages = messages.filter(message => !message.pinned)
-        filteredMessages.deleteAll();
-    }).catch(console.error);
+function getServerByGuild(g){
+    for(let i = 0; i < servers.length; i++){
+        if(servers[i].Guild.id == g.id){
+            return servers[i];
+        }
+    }
 }
 
+//Deletes messages from the channel that the command was posted in
+function purge(msg, args) {
+    getServerByGuild(msg.channel.guild).purge(msg.channel, parseInt(args[0]));
+}
+
+function join(msg){
+    getServerByGuild(msg.channel.guild).join(msg, msg.member.voiceChannel);
+}
+
+function leave(msg){
+    getServerByGuild(msg.channel.guild).leave();
+}
 
 //Posts an embed that lists all the commands that the bot can do and what they do.
-function help(msg, command, args){
-    msg.channel.send({embed: {
-
-        author: {
-            icon_url: client.user.avatarURL
-        },
-        fields: [{
-
-            name: "!help",
-            value: "Display a list of the commands, how to use them, and a description of what they do."
-
-        },
-
-        {
-
-            name: "!purge [number of messages -- optional]",
-            value: "Delete up to 100 messages from the channel this is called in. If no argument is provided, then it will delete up to 100 messages."
-
-        },
-
-        {
-
-            name: "!ping",
-            value: "The bot replies \"pong\". Mostly used to test if the bot is working... or if you're bored."
-
-        },
-
-        {
-
-            name: "!play [Youtube Link]",
-            value: "The bot will join the Voice Channel you are in and stream the video audio."
-
-        },
-        {
-
-            name: "!skip",
-            value: "The bot will skip the current song and either move on to the next one in queue, or will leave the channel if there isn't one."
-
-        }
-    ]
-
-    }});
+function help(msg){
+    getServerByGuild(msg.channel.guild).help(msg.channel);
 }
 
 //Replies pong.
-function ping(msg, command, args){
+function ping(msg, args){
     msg.reply("pong");
 }
 
 
 //Queues a Youtube URL, join's the voice channel of the user who called it, and plays the Youtube Video's audio.
-function play(msg, command, args){
-
-    //The channel the user who called the command is in. undefined if user is not in a channel
-    var channel = msg.member.voiceChannel;
-
-    //Check if the user is in a voice channel before trying to connect, and that the channel (if existing) is joinable.
-    if(!channel || !channel.joinable){
-        msg.reply("You must be in a joinable voice channel to use this command.");
-    }
-
-    //Causes the bot to join the channel the user is in
-
-    //Add their request to the queue.
-    queue.push(args[0]);
-
-    //If the connection is ever undefined or null, then it's not in a channel, and therefore is safe to join the user's channel
-    if(connection === undefined || connection === null){
-        //Get the request from the Queue.
-        var request = queue.shift();
-        streamSong(request, channel, msg);
-
-    } else{
-        console.log(connection + "," + dispatcher);
-    }
-
+function play(msg, args){
+    getServerByGuild(msg.channel.guild).play(msg, msg.member.voiceChannel, args[0]);
 }
 
-//Ends the current Dispatcher stream if it's currently running.
+//Calls Dispatcher.end() which either plays the next song or leaves the current voice channel
 function skip(msg){
-    if((dispatcher !== undefined) || (dispatcher != null)){
-        dispatcher.end();
-    } else {
-        msg.reply("A song needs to be in queue to skip.");
-    }
-}
-
-function streamSong(request, channel, msg){
-//Join the user's channel
-        connection = channel.join().then(conn =>{
-            //Get the audio stream from Youtube
-            const stream = ytdl(request, {filter: 'audioonly'});
-            stream.on('error', console.error);
-            //Play the stream to the user.
-            dispatcher = conn.playStream(stream, {seek: 0, volume: 1});
-            finished = false;
-            //When the Dispatcher finishes playing a stream
-            dispatcher.on('end',() => {
-
-                //If the queue isn't empty, play the next song, otherwise leave the channel
-                if(queue.length > 0){
-                    streamSong(queue.shift(), channel);
-                } else {
-                    channel.leave();
-
-                    //Reset the connection and dispatcher vars.
-                    connection = null;
-                    dispatcher = null;
-                }
-            });
-
-        });
+    getServerByGuild(msg.channel.guild).skip(msg, "This shouldn't ever show up.");
 }
 
 function songRequestError(request, channel, msg){
@@ -175,29 +97,170 @@ client.on('message', msg => {
     if(!input.startsWith(cmdIdentifier)) return;
 
     //This gives us a command and an args system.
-    //So a message to the bot looks like !command arg1 arg2 arg3
+    //So a message to the bot looks like !command arg0 arg1 arg2
     var args = input.slice(cmdIdentifier.length).trim().split(/ +/g);
 
     var command = args.shift().toLowerCase();
 
     switch(command){
         case 'purge':
-            purge(msg, command, args);
+            purge(msg, args);
             break;
         case 'help':
-            help(msg, command, args);
+            help(msg);
             break;
         case 'ping':
-            ping(msg, command, args);
+            ping(msg);
             break;
         case 'play':
-            play(msg, command, args);
+            play(msg, args);
             break;
         case 'skip':
             skip(msg);
+            break;
+        case 'join':
+            join(msg);
+            break;
+        case 'leave':
+            leave(msg);
             break;
     }
 });
 
 
 client.login(info["token"]);
+
+
+class Server{
+
+    constructor (g){
+        //A server that the bot is connected to
+        this.guild = g;
+        //A list of queued songs to play
+        this.queue = new Array();
+        //The current Voice channel the bot is in on this server
+        this.connection = null;
+    }
+
+    get Guild(){
+        return this.guild;
+    }
+
+    purge(channel, numMsgs){
+        channel.fetchMessages({ limit : numMsgs}).then(messages => {
+            var filteredMessages = messages.filter(message => !message.pinned)
+            filteredMessages.deleteAll();
+        }).catch(console.error);
+    }
+
+    help(channel){
+        channel.send({embed: {
+
+            author: {
+                icon_url: client.user.avatarURL
+            },
+            fields: [{
+
+                name: "!help",
+                value: "Display a list of the commands, how to use them, and a description of what they do."
+
+            },
+
+            {
+
+                name: "!purge [number of messages -- optional]",
+                value: "Delete up to 100 messages from the channel this is called in. If no argument is provided, then it will delete up to 100 messages."
+
+            },
+
+            {
+
+                name: "!ping",
+                value: "The bot replies \"pong\". Mostly used to test if the bot is working... or if you're bored."
+
+            },
+
+            {
+
+                name: "!play [Youtube Link]",
+                value: "The bot will join the Voice Channel you are in and stream the video audio."
+
+            },
+            {
+
+                name: "!skip",
+                value: "The bot will skip the current song and either move on to the next one in queue, or will leave the channel if there isn't one."
+
+            }
+        ]
+
+        }});
+    }
+
+    join(msg, channel){
+        this.connection = channel;
+
+        if(!channel || !channel.joinable){
+            msg.reply("You must be in a joinable voice channel to use this command.");
+            return;
+        }
+
+        return channel.join();
+    }
+
+    leave(){
+        this.connection.leave();
+        this.connection = null;
+    }
+
+    play(msg, channel, req){
+        this.queue.push(req);
+
+        //If the connection is ever undefined or null, then it's not in a channel, and therefore is safe to join the user's channel
+        if(this.connection === undefined || this.connection === null){
+            //Get the request from the Queue.
+            var request = this.queue.shift();
+            this.streamSong(msg, channel, req);
+
+        }
+
+    }
+
+    streamSong(msg, channel, req){
+
+            this.join(msg, channel).then(conn =>{
+                //Get the audio stream from Youtube
+                const stream = ytdl(req, {filter: 'audioonly'});
+                stream.on('error', function(e) {
+                    this.leave();
+                });
+                //Play the stream to the user.
+                this.dispatcher = conn.playStream(stream, {seek: 0, volume: 1});
+                //When the Dispatcher finishes playing a stream
+                this.dispatcher.on('end',() => {
+                    //If the queue isn't empty, play the next song, otherwise leave the channel
+                    if(this.queue.length > 0){
+                        this.streamSong(msg, channel, this.queue.shift());
+                    } else {
+                        this.leave();
+                    }
+                });
+
+            }).catch(e => {
+                console.log("That's a fuckin yikes");
+                if(this.queue.length > 0){
+                    this.streamSong(msg, channel, this.queue.shift());
+                } else {
+                    this.leave();
+                }
+            });
+    }
+
+    skip(msg, errMsg){
+        if((this.dispatcher !== undefined) || (this.dispatcher != null)){
+            this.dispatcher.end();
+        } else {
+            msg.reply(errMsg);
+        }
+    }
+}
