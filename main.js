@@ -12,6 +12,9 @@ const client = new Discord.Client();
 //Used to stream audio from Youtube videos
 const ytdl = require('ytdl-core');
 
+//Used to get individual videos from a playlist URL
+const ytlist = require('youtube-playlist');
+
 //Used to help filter messages the bot doesn't need to further process
 const cmdIdentifier = '!';
 
@@ -70,12 +73,42 @@ function ping(msg, args){
 
 //Queues a Youtube URL, join's the voice channel of the user who called it, and plays the Youtube Video's audio.
 function play(msg, args){
-    getServerByGuild(msg.channel.guild).play(msg, msg.member.voiceChannel, args[0]);
+
+    //If the Request is a Playlist we need to get all of the individual URLs
+    if(args[0].includes("&list=")){
+        ytlist(args[0], 'url').then(res =>{
+            //An Array to store all the individual URLs
+            reqs = new Array();
+
+            //Populate the Array with individual Youtube video URLs
+            reqs = reqs.concat(res.data.playlist);
+
+            //Play the first song in the array
+            getServerByGuild(msg.channel.guild).play(msg, msg.member.voiceChannel, reqs.shift());
+            //Add the rest to the Queue
+            getServerByGuild(msg.channel.guild).addToQueue(reqs);
+        });
+        //If it's not a Playlist we can just treat it as 1 song and play it like normal
+    } else {
+        getServerByGuild(msg.channel.guild).play(msg, msg.member.voiceChannel, args[0]);
+    }
 }
 
 //Calls Dispatcher.end() which either plays the next song or leaves the current voice channel
-function skip(msg){
-    getServerByGuild(msg.channel.guild).skip(msg, "This shouldn't ever show up.");
+function skip(msg, args){
+
+    //Check if there are any args
+    if(args !== null || args !== undefined){
+        //If there are, make sure it's a number OR the word 'all'
+        if(parseInt(args[0]) == NaN && args[0].toLowerCase() != "all"){
+            //If they're not a number we can't skip any songs so just return.
+            msg.reply("You must pass in a number of songs to be skipped.");
+            return;
+        }
+    }
+
+    //If all is good, skip some songs
+    getServerByGuild(msg.channel.guild).skip(msg, args[0], "This shouldn't ever show up.");
 }
 
 //Whenever a user posts a message to a channel
@@ -111,7 +144,7 @@ client.on('message', msg => {
             play(msg, args);
             break;
         case 'skip':
-            skip(msg);
+            skip(msg, args);
             break;
         case 'join':
             join(msg);
@@ -183,8 +216,8 @@ class Server{
             },
             {
 
-                name: "!skip",
-                value: "The bot will skip the current song and either move on to the next one in queue, or will leave the channel if there isn't one."
+                name: "!skip [Number of songs to skip, or the word \"all\" -- optional]",
+                value: "The bot will skip the current song and move on to the next one, will skip a number of songs, or will skip all the songs. If the queue is empty, the bot will leave the channel."
 
             }
         ]
@@ -221,12 +254,16 @@ class Server{
 
     }
 
+    addToQueue(reqs){
+        this.queue = this.queue.concat(reqs);
+    }
+
     streamSong(msg, channel, req){
 
             this.join(msg, channel).then(conn =>{
                 //Get the audio stream from Youtube
                 const stream = ytdl(req, {filter: 'audioonly'});
-                stream.on('error', function(e) {
+                stream.on('error', e => {
                     this.leave();
                 });
                 //Play the stream to the user.
@@ -250,8 +287,19 @@ class Server{
             });
     }
 
-    skip(msg, errMsg){
+    skip(msg, numSkip, errMsg){
         if((this.dispatcher !== undefined) || (this.dispatcher != null)){
+            //If it's a string, then the only passable String allowed here is 'all', so we just empty the queue
+            if(typeof numSkip == String){
+                this.queue.splice(0, queue.length);
+            } else {
+                //Check if the amount to be skipped doesn't exceed the Array length otherwise just empty the queue
+                if(numSkip > queue.length){
+                    this.queue.splice(0, numSkip-1);
+                } else {
+                    this.queue.splice(0, queue.length);
+                }
+            }
             this.dispatcher.end();
         } else {
             msg.reply(errMsg);
