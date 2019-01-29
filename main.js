@@ -290,7 +290,7 @@ class Server{
     skip(msg, numSkip, errMsg){
         if((this.dispatcher !== undefined) || (this.dispatcher != null)){
             //If it's a string, then the only passable String allowed here is 'all', so we just empty the queue
-            if(typeof numSkip == String){
+            if(typeof numSkip == "string"){
                 this.queue.splice(0, queue.length);
             } else {
                 //Check if the amount to be skipped doesn't exceed the Array length otherwise just empty the queue
