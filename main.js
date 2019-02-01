@@ -111,6 +111,20 @@ function skip(msg, args){
     getServerByGuild(msg.channel.guild).skip(msg, args[0], "This shouldn't ever show up.");
 }
 
+function changeVolume(msg, args){
+    //Check if there are any args
+    if(args !== null || args !== undefined){
+        //If there are, make sure it's a number
+        if(parseInt(args[0]) == NaN){
+            //If they're not a number we can't change the volume to it.
+            msg.reply("You must pass in a number between 0.1 or 1.0 or nothing to see the current volume.");
+            return;
+        }
+    }
+
+    getServerByGuild(msg.channel.guild).changeVolume(msg, args[0]);
+}
+
 //Whenever a user posts a message to a channel
 client.on('message', msg => {
 
@@ -152,6 +166,8 @@ client.on('message', msg => {
         case 'leave':
             leave(msg);
             break;
+        case 'volume':
+            changeVolume(msg, args);
     }
 });
 
@@ -168,6 +184,8 @@ class Server{
         this.queue = new Array();
         //The current Voice channel the bot is in on this server
         this.connection = null;
+        //The volume of the audio stream
+        this.volume = 1.0;
     }
 
     get Guild(){
@@ -219,10 +237,31 @@ class Server{
                 name: "!skip [Number of songs to skip, or the word \"all\" -- optional]",
                 value: "The bot will skip the current song and move on to the next one, will skip a number of songs, or will skip all the songs. If the queue is empty, the bot will leave the channel."
 
+            },
+            {
+
+                name: "!volume [Number between 0.1 and 1.0]",
+                value: "Changes the volume of the songs the bot plays for all users. This is independent of the volume set on your Discord client. If no argument is provided it will return the current volume."
+
             }
         ]
 
         }});
+    }
+
+    changeVolume(msg, val){
+        if(val !== null && val !== undefined){
+            //Clamping the volume
+            if(val > 1.0){
+                val = 1.0;
+            } else if (val < 0.1){
+                val = 0.1;
+            }
+
+            this.volume = val;
+        } else {
+            msg.reply("The volume is currently set to " + this.volume * 100 + "%.")
+        }
     }
 
     join(msg, channel){
@@ -264,10 +303,12 @@ class Server{
                 //Get the audio stream from Youtube
                 const stream = ytdl(req, {filter: 'audioonly'});
                 stream.on('error', e => {
+                    msg.reply("There was something wrong with the song request");
+                    console.log(e);
                     this.leave();
                 });
                 //Play the stream to the user.
-                this.dispatcher = conn.playStream(stream, {seek: 0, volume: 1});
+                this.dispatcher = conn.playStream(stream, {seek: 0, volume: this.volume});
                 //When the Dispatcher finishes playing a stream
                 this.dispatcher.on('end',() => {
                     //If the queue isn't empty, play the next song, otherwise leave the channel
@@ -279,6 +320,8 @@ class Server{
                 });
 
             }).catch(e => {
+                msg.reply("There was something wrong with the dispatcher");
+                console.log(e);
                 if(this.queue.length > 0){
                     this.streamSong(msg, channel, this.queue.shift());
                 } else {
@@ -303,6 +346,7 @@ class Server{
             this.dispatcher.end();
         } else {
             msg.reply(errMsg);
+            console.log("Someone probably skipped before the dispatcher loaded.");
         }
     }
 }
