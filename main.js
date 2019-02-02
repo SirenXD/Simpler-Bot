@@ -14,16 +14,18 @@ const ytdl = require('ytdl-core');
 
 //Used to get individual videos from a playlist URL
 const ytlist = require('youtube-playlist');
+//Used to get access to the Spotify Web API
+const Spotify = require('spotify-web-api-node');
+var spotifyAPI;
+
+//Used to search for Youtube videos by relevant spotify information.
+const ytSearch = require("youtube-search");
 
 //Used to help filter messages the bot doesn't need to further process
 const cmdIdentifier = '!';
 
-//The current Voice Channel
-var connection;
 //Whether or not the player is currently playing
 var finished = true;
-//The audio player
-var dispatcher;
 
 //A queue of requested songs
 var queue = new Array();
@@ -34,10 +36,31 @@ var servers = new Array();
 //On successful login
 client.on('ready', () => {
     console.log(`\n\n\nLogged in as ${client.user.tag}!`);
+    //Add all connected Guilds to an Array
     for(let i = 0; i < client.guilds.array().length; i++){
         servers.push(new Server(client.guilds.array()[i]));
     }
+    //Initialize the Spotify Web API
+    spotifyAPI = new Spotify({
+        clientId: info["spoClientID"],
+        clientSecret: info["spoClientSecret"]
+    });
+    //Generate a Spotify Auth Token
+    generateSpotifyAuthToken()
+    //Generate a new one before the old one expires
+    setTimeout(generateSpotifyAuthToken, 3420000);
 });
+
+function generateSpotifyAuthToken(){
+    //Generate an Access Token
+    spotifyAPI.clientCredentialsGrant().then(function(data){
+        console.log('The access token is ' + data.body['access_token']);
+
+        spotifyAPI.setAccessToken(data.body['access_token']);
+    }, function(err){
+        console.log("Couldn't generate an Auth Token for the Spotify Web API.")
+    });
+}
 
 function getServerByGuild(g){
     for(let i = 0; i < servers.length; i++){
@@ -73,7 +96,85 @@ function ping(msg, args){
 
 //Queues a Youtube URL, join's the voice channel of the user who called it, and plays the Youtube Video's audio.
 function play(msg, args){
+    //Used to filter Youtube Search results.
+    var opts = {key: info["ytAPIKey"], type: 'video', maxResults: '1'};
 
+    //If it's a Spotify Playlist
+    if(args[0].includes("/playlist/")){
+        //Remove some extra unnecessary data
+        if(args[0].includes("?si=")){
+            args[0] = args[0].slice(0, args[0].indexOf("?si="));
+        }
+
+        //Get the Spotify URI of the Playlist
+        args[0] = args[0].slice(args[0].indexOf("/playlist/") + "/playlist/".length, args[0].length);
+
+        //Get a list of tracks from the playlist
+        let trackList = spotifyAPI.getPlaylist(args[0]).then( data => {
+            console.log("Looping to play tracks...");
+            //Loop through the tracks
+            for(let i = 0; i < data.body.tracks.items.length; i++){
+
+                console.log(data.body.tracks.items[i].track.name + " " + data.body.tracks.items[i].track.album.name);
+
+                //Search Youtube for hopefully a close match to the song.
+                ytSearch(data.body.tracks.items[i].track.name + " " + data.body.tracks.items[i].track.album.name, opts).then((result, err) =>{
+                    if(err){
+                        console.log(err);
+                        msg.reply("The Youtube-API request quota was probably reached. I can't do anything about that. Sorry :frowning:");
+                        return;
+                    }
+
+                    //The Youtube URL chosen
+                    url = result.results[0].link;
+                    console.log("From Youtube, requesting: " + url);
+
+                    //If a song is currently playing
+                    if(!getServerByGuild(msg.channel.guild).isPlaying()){
+                        play(msg, [url]);
+                    } else {
+                        getServerByGuild(msg.channel.guild).addToQueue([url]);
+                    }
+                });
+            }
+
+        });
+        return;
+    }
+
+    //If the request is a single Spotify URL
+    if(args[0].includes("spotify.com/track/")){
+
+        //Clean it up
+        if(args[0].includes("?si=")){
+            args[0] = args[0].slice(0, args[0].indexOf("?si="));
+        }
+
+        //Get the Spotify URI
+        args[0] = args[0].slice(args[0].indexOf("track/") + "track/".length, args[0].length);
+
+        //Get specific track information
+        let track = spotifyAPI.getTrack(args[0]).then(data =>{
+            console.log("From Spotify, requesting: " + data.body.name + " " + data.body.album.name);
+
+            //Search Youtube for (hopefully) a close match.
+            ytSearch(data.body.name + " " + data.body.album.name, opts).then((result, err) =>{
+                if(err){
+                    console.log(err);
+                    msg.reply("The Youtube-API request quota was probably reached. I can't do anything about that. Sorry :frowning:");
+                    return;
+                }
+
+                req = new Array();
+                req.push(result.results[0].link);
+                console.log("From Youtube, requesting: " + req);
+
+                //Request the song as a Youtube URL
+                play(msg, req);
+            });
+        });
+        return;
+    }
     //If the Request is a Playlist we need to get all of the individual URLs
     if(args[0].includes("&list=")){
         ytlist(args[0], 'url').then(res =>{
@@ -171,8 +272,7 @@ client.on('message', msg => {
     }
 });
 
-
-client.login(info["token"]);
+client.login(info["disToken"]);
 
 
 class Server{
@@ -186,10 +286,16 @@ class Server{
         this.connection = null;
         //The volume of the audio stream
         this.volume = 1.0;
+        //
+        this.playing = false;
     }
 
     get Guild(){
         return this.guild;
+    }
+
+    isPlaying(){
+        return this.playing;
     }
 
     purge(channel, numMsgs){
@@ -278,10 +384,12 @@ class Server{
     leave(){
         this.connection.leave();
         this.connection = null;
+        this.playing = false;
     }
 
     play(msg, channel, req){
         this.queue.push(req);
+        this.playing = true;
 
         //If the connection is ever undefined or null, then it's not in a channel, and therefore is safe to join the user's channel
         if(this.connection === undefined || this.connection === null){
@@ -312,6 +420,7 @@ class Server{
                 //When the Dispatcher finishes playing a stream
                 this.dispatcher.on('end',() => {
                     //If the queue isn't empty, play the next song, otherwise leave the channel
+                    console.log(this.queue);
                     if(this.queue.length > 0){
                         this.streamSong(msg, channel, this.queue.shift());
                     } else {
@@ -333,14 +442,15 @@ class Server{
     skip(msg, numSkip, errMsg){
         if((this.dispatcher !== undefined) || (this.dispatcher != null)){
             //If it's a string, then the only passable String allowed here is 'all', so we just empty the queue
-            if(typeof numSkip === "string"){
-                this.queue = this.queue.splice(0, queue.length-1);
-            } else {
+            if(numSkip == "all"){
+                this.queue.splice(0, this.queue.length-1);
+            } else if(numSkip !== undefined){
+                numSkip = parseInt(numSkip);
                 //Check if the amount to be skipped doesn't exceed the Array length otherwise just empty the queue
-                if(numSkip > queue.length){
-                    this.queue = this.queue.splice(0, numSkip-1);
-                } else {
-                    this.queue = this.queue.splice(0, queue.length-1);
+                if(numSkip <= this.queue.length){
+                    this.queue.splice(0, numSkip);
+                } else if(numSkip > this.queue.length){
+                    this.queue.splice(0, this.queue.length-1);
                 }
             }
             this.dispatcher.end();
