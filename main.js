@@ -135,9 +135,15 @@ function play(msg, args){
                     } else {
                         getServerByGuild(msg.channel.guild).addToQueue([url]);
                     }
+                }).catch((e) => {
+                    msg.reply("Something's wrong with the Youtube API!");
+                    console.log("YT Search:" + args[0]);
                 });
             }
 
+        }).catch((e) => {
+            msg.reply("Something is wrong with the Spotify API!");
+            console.log("Spotify URI: " + args[0]);
         });
         return;
     }
