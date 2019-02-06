@@ -143,7 +143,7 @@ function play(msg, args){
 
         }).catch((e) => {
             msg.reply("Something is wrong with the Spotify API!");
-            console.log("Spotify URI: " + args[0]);
+            console.log("Spotify Playlist URI: " + args[0]);
         });
         return;
     }
@@ -177,8 +177,14 @@ function play(msg, args){
 
                 //Request the song as a Youtube URL
                 play(msg, req);
-            });
-        });
+            }).catch((e) => {
+                msg.reply("Something's wrong with the Youtube API!");
+                console.log("YT Search:" + args[0]);
+            });;
+        }).catch((e) => {
+            msg.reply("Something is wrong with the Spotify API!");
+            console.log("Spotify Track URI: " + args[0]);
+        });;
         return;
     }
     //If the Request is a Playlist we need to get all of the individual URLs
