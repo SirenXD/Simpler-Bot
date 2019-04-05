@@ -9,9 +9,6 @@ const Discord = require('discord.js');
 //A Discord User Client (Bot)
 const client = new Discord.Client();
 
-//Used to stream audio from Youtube videos
-const ytdl = require('ytdl-core');
-
 //Used to get access to the Spotify Web API
 const Spotify = require('spotify-web-api-node');
 var spotifyAPI;
@@ -82,7 +79,7 @@ client.on('message', msg => {
             commands.purge(msg, args);
             break;
         case 'help':
-            commands.help(msg);
+            commands.help(msg, client.user.avatarURL);
             break;
         case 'ping':
             commands.ping(msg);

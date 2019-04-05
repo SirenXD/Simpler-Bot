@@ -1,3 +1,7 @@
+
+//Used to stream audio from Youtube videos
+const ytdl = require('ytdl-core');
+
 class Server{
 
     constructor (g){
@@ -28,11 +32,11 @@ class Server{
         }).catch(console.error);
     }
 
-    help(channel){
+    help(channel, icon_url){
         channel.send({embed: {
 
             author: {
-                icon_url: client.user.avatarURL
+                icon_url: icon_url
             },
             fields: [{
 
