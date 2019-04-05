@@ -7,6 +7,13 @@ const ytlist = require('youtube-playlist');
 //Used to search for Youtube videos by relevant spotify information.
 const ytSearch = require("youtube-search");
 
+var spotifyAPI = '';
+
+
+function setSpotifyAPI(api){
+    spotifyAPI = api;
+}
+
 //Used to add a server to the list of servers
 function addServer(server){
     servers.push(server);
@@ -56,38 +63,42 @@ function getSpotifyURI(url){
     //Get the Spotify URI of the Playlist
     url = url.slice(url.indexOf("/playlist/") + "/playlist/".length, url.length);
 
+
+    //Get the Spotify URI of the Playlist
+    url = url.slice(url.indexOf("/track/") + "/track/".length, url.length);
+
     return url;
 }
 
 //Search Youtube for the Spotify track(S)
-function searchForYoutube(tracks){
-    for(let i = 0; i < tracks.length; i++){
+function searchForYoutube(track, opts, msg){
 
-        console.log(tracks[i].track.name + " " + tracks[i].track.album.name);
+    console.log(track.name + " " + track.album.name);
 
-        //Search Youtube for hopefully a close match to the song.
-        ytSearch(tracks[i].track.name + " " + tracks[i].track.album.name, opts).then((result, err) =>{
-            if(err){
-                console.log(err);
-                msg.reply("The Youtube-API request quota was probably reached. I can't do anything about that. Sorry :frowning:");
-                return;
-            }
+    console.log(track);
 
-            //The Youtube URL chosen
-            url = result.results[0].link;
-            console.log("From Youtube, requesting: " + url);
+    //Search Youtube for hopefully a close match to the song.
+    ytSearch(track.name + " " + track.album.name, opts).then((result, err) =>{
+        if(err){
+            console.log(err);
+            msg.reply("The Youtube-API request quota was probably reached. I can't do anything about that. Sorry :frowning:");
+            return;
+        }
 
-            //If a song is currently playing
-            if(!getServerByGuild(msg.channel.guild).isPlaying()){
-                play(msg, [url]);
-            } else {
-                getServerByGuild(msg.channel.guild).addToQueue([url]);
-            }
-        }).catch((e) => {
-            msg.reply("Something's wrong with the Youtube API!");
-            console.log("YT Search:" + args[0]);
-        });
-    }
+        //The Youtube URL chosen
+        url = result.results[0].link;
+        console.log("From Youtube, requesting: " + url);
+
+        //If a song is currently playing
+        if(!getServerByGuild(msg.channel.guild).isPlaying()){
+            play(msg, [url]);
+        } else {
+            getServerByGuild(msg.channel.guild).addToQueue([url]);
+        }
+    }).catch((e) => {
+        msg.reply("Something's wrong with the Youtube API!");
+        console.log("YT Search:" + args[0]);
+    });
 }
 
 //Queues a Youtube URL, join's the voice channel of the user who called it, and plays the Youtube Video's audio.
@@ -104,7 +115,10 @@ function play(msg, args, key){
         let trackList = spotifyAPI.getPlaylist(args[0]).then( data => {
             console.log("Looping to play tracks...");
             //Loop through the tracks
-            searchForYoutube(data.body.tracks.items);
+
+            for(let i = 0; i < data.body.tracks.items.length; i++){
+                searchForYoutube(data.body.tracks.items[i], opts, msg);
+            }
         }).catch((e) => {
             msg.reply("Something is wrong with the Spotify API!");
             console.log("Spotify Playlist URI: " + args[0]);
@@ -118,11 +132,13 @@ function play(msg, args, key){
         //Get the Spotify URI of the Track
         args[0] = getSpotifyURI(args[0]);
 
+        console.log(args[0]);
+
         //Get specific track information
         let track = spotifyAPI.getTrack(args[0]).then(data =>{
             console.log("From Spotify, requesting: " + data.body.name + " " + data.body.album.name);
             //Get & Request the approximate Youtube equivalent
-            searchForYoutube([{track: data.body}]);
+            searchForYoutube(data.body, opts, msg);
         }).catch((e) => {
             msg.reply("Something is wrong with the Spotify API!");
             console.log("Spotify Track URI: " + args[0]);
@@ -182,7 +198,7 @@ function changeVolume(msg, args){
 
 
 let commands = {
-    purge, join, leave, help, ping, play, skip, changeVolume, addServer
+    purge, join, leave, help, ping, play, skip, changeVolume, addServer, setSpotifyAPI
 };
 
 module.exports = commands;

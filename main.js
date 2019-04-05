@@ -40,7 +40,9 @@ client.on('ready', () => {
         clientSecret: info["spoClientSecret"]
     });
     //Generate a Spotify Auth Token
-    generateSpotifyAuthToken()
+    generateSpotifyAuthToken();
+
+    commands.setSpotifyAPI(spotifyAPI);
     //Generate a new one before the old one expires
     setTimeout(generateSpotifyAuthToken, 3420000);
 });
